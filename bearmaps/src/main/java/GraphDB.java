@@ -1,12 +1,15 @@
 import org.xml.sax.SAXException;
-
 import java.io.File;
 import java.io.FileInputStream;
 import java.io.IOException;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
-import java.util.*;
+import java.util.HashMap;
+import java.util.HashSet;
+import java.util.Collections;
+import java.util.List;
+import java.util.ArrayList;
 
 /**
  * Graph for storing all of the intersection (vertex) and road (edge) information.
@@ -20,30 +23,68 @@ import java.util.*;
 public class GraphDB {
 
     static class Node {
-        String id;
-        String lon;
-        String lat;
-        public  Node(String id, String lon, String lat) {
+        long id;
+        String name;
+        double lon;
+        double lat;
+        Node(long id, double lon, double lat) {
             this.id = id;
             this.lon = lon;
             this.lat = lat;
         }
-    }
-    static class Edge {
-        String id;
-        ArrayList<Node> nodes;
-        public Edge(String id, ArrayList nodes) {
-            this.id = id;
-            this.nodes = nodes;
+
+        public void setName(String name) {
+            this.name = name;
+        }
+        public double getLat() {
+            return lat;
+        }
+
+        public double getLon() {
+            return lon;
         }
     }
-    HashMap<Node, HashSet<Node>> allnodes = new HashMap();
-    HashMap<Node, Edge> edges = new HashMap();
-    public void addNode(Node node) {
-        allnodes.put(node, new HashSet<>());
+    static class Edge {
+        long id;
+        ArrayList<Long> nodes;
+        Boolean valid;
+        String name;
+
+        Edge(long id) {
+            this.id = id;
+            this.nodes = new ArrayList<>();
+            this.valid = false;
+        }
+
+        public void addVertices(long v) {
+            nodes.add(v);
+        }
+
+        public void setValid(Boolean valid) {
+            this.valid = valid;
+        }
+        public void setName(String name) {
+            this.name = name;
+        }
     }
-    public void addEdge(Node node, Edge edge) {
-        edges.put(node, edge);
+    HashMap<Long, Node> nodes = new HashMap();
+    HashMap<Long, Edge> edges = new HashMap<>();
+    HashMap<Long, HashSet<Long>> neighbors = new HashMap<>();
+    public void addNode(Node node) {
+        nodes.put(node.id, node);
+    }
+    public void addEdge(Long id, Edge edge) {
+        edges.put(id, edge);
+    }
+    public void addNeighbors(Long v, Long w) {
+        if (!neighbors.containsKey(v) || neighbors.get(v) == null) {
+            neighbors.put(v, new HashSet<>());
+        }
+        if (!neighbors.containsKey(w) || neighbors.get(w) == null) {
+            neighbors.put(w, new HashSet<>());
+        }
+        neighbors.get(v).add(w);
+        neighbors.get(w).add(v);
     }
     /**
      * This constructor creates and starts an XML parser, cleans the nodes, and prepares the
@@ -77,7 +118,13 @@ public class GraphDB {
      * we can reasonably assume this since typically roads are connected.
      */
     private void clean() {
-        // TODO
+        HashMap<Long, Node> tmp = (HashMap) nodes.clone();
+        for (Long v: tmp.keySet()) {
+            if (!neighbors.containsKey(v) || neighbors.get(v) == null) {
+                neighbors.remove(v);
+                nodes.remove(v);
+            }
+        }
     }
 
     /**
@@ -86,8 +133,10 @@ public class GraphDB {
      * @return The longitude of that vertex, or 0.0 if the vertex is not in the graph.
      */
     double lon(long v) {
-        // TODO
-        return 0;
+        if (!nodes.containsKey(v)) {
+            return 0.0;
+        }
+        return nodes.get(v).getLon();
     }
 
     /**
@@ -96,8 +145,10 @@ public class GraphDB {
      * @return The latitude of that vertex, or 0.0 if the vertex is not in the graph.
      */
     double lat(long v) {
-        // TODO
-        return 0;
+        if (!nodes.containsKey(v)) {
+            return 0.0;
+        }
+        return nodes.get(v).getLat();
     }
 
     /**
@@ -105,8 +156,7 @@ public class GraphDB {
      * @return An iterable of all vertex IDs in the graph.
      */
     Iterable<Long> vertices() {
-        // TODO
-        return Collections.emptySet();
+        return nodes.keySet();
     }
 
     /**
@@ -116,8 +166,10 @@ public class GraphDB {
      * iterable if the vertex is not in the graph.
      */
     Iterable<Long> adjacent(long v) {
-        // TODO
-        return Collections.emptySet();
+        if (!neighbors.containsKey(v)) {
+            return Collections.emptySet();
+        }
+        return neighbors.get(v);
     }
 
     /**
@@ -147,8 +199,24 @@ public class GraphDB {
      * @return The ID for the vertex closest to the <code>lon</code> and <code>lat</code>.
      */
     public long closest(double lon, double lat) {
-        // TODO
-        return 0;
+        double min = -1;
+        long id = -1;
+        for (long v: nodes.keySet()) {
+            double phi1 = Math.toRadians(lat);
+            double phi2 = Math.toRadians(lat(v));
+            double dphi = Math.toRadians(lat - lat(v));
+            double dlambda = Math.toRadians(lon - lon(v));
+            double a = Math.sin(dphi / 2.0) * Math.sin(dphi / 2.0);
+            a += Math.cos(phi1) * Math.cos(phi2)
+                    * Math.sin(dlambda / 2.0) * Math.sin(dlambda / 2.0);
+            double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+            double distance = R * c;
+            if (min == -1 || min > distance) {
+                min = distance;
+                id = v;
+            }
+        }
+        return id;
     }
 
     /**

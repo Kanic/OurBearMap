@@ -37,7 +37,9 @@ public class GraphBuildingHandler extends DefaultHandler {
     );
     private String activeState = "";
     private final GraphDB g;
-
+    private Long wayid;
+    private GraphDB.Edge edge;
+    private GraphDB.Node node;
     /**
      * Create a new GraphBuildingHandler.
      * @param g The graph to populate with the XML data.
@@ -69,54 +71,56 @@ public class GraphBuildingHandler extends DefaultHandler {
             // System.out.println("Node id: " + attributes.getValue("id"));
             // System.out.println("Node lon: " + attributes.getValue("lon"));
             // System.out.println("Node lat: " + attributes.getValue("lat"));
-            GraphDB.Node node = new GraphDB.Node(attributes.getValue("id"),
-                    attributes.getValue("lon"), attributes.getValue("lat"));
+            node = new GraphDB.Node(Long.parseLong(attributes.getValue("id")),
+                    Double.parseDouble(attributes.getValue("lon")),
+                    Double.parseDouble(attributes.getValue("lat")));
             g.addNode(node);
-
         } else if (qName.equals("way")) {
             /* Encountering a new <way...> tag. */
             activeState = "way";
+            wayid = Long.parseLong(attributes.getValue("id"));
+            edge = new GraphDB.Edge(wayid);
+
             // System.out.println("Beginning a way...");
         } else if (activeState.equals("way") && qName.equals("nd")) {
             /* While looking at a way, found a <nd...> tag. */
             // System.out.println("Node id in this way: " + attributes.getValue("ref"));
-
-            /* TODO: Use the above id to make "possible" connections between the nodes in this way.
+            /*
              * Hint 1: It would be useful to remember what was the last node in this way.
              * Hint 2: Not all ways are valid. So, directly connecting the nodes here would be
                cumbersome since you might have to remove the connections if you later see a tag that
                makes this way invalid. Instead, think of keeping a list of possible connections and
                remember whether this way is valid or not. */
-            
+            edge.addVertices(Long.parseLong(attributes.getValue("ref")));
         } else if (activeState.equals("way") && qName.equals("tag")) {
             /* While looking at a way, found a <tag...> tag. */
             String k = attributes.getValue("k");
             String v = attributes.getValue("v");
-            if (k.equals("maxspeed")) {
-                // System.out.println("Max Speed: " + v);
-
-                /* TODO: Set the max speed of the "current way" here. */
-
-            } else if (k.equals("highway")) {
+            if (k.equals("highway")) {
                 // System.out.println("Highway type: " + v);
 
-                /* TODO: Figure out whether this way and its connections are valid.
+                /*
                  * Hint: Set a "flag". */
+                if (ALLOWED_HIGHWAY_TYPES .contains(v)) {
+                    edge.setValid(true);
+                }
 
             } else if (k.equals("name")) {
                 // System.out.println("Way Name: " + v);
+                edge.setName(attributes.getValue(v));
             }
             // System.out.println("Tag with k=" + k + ", v=" + v + ".");
         } else if (activeState.equals("node") && qName.equals("tag") && attributes.getValue("k")
                 .equals("name")) {
             /* While looking at a node, found a <tag...> with k="name". */
 
-            /* TODO: Create a location.
+            /*
              * Hint: Since we found this <tag...> INSIDE a node, we should probably remember which
              * node this tag belongs to. Remember XML is parsed top-to-bottom, so probably it's the
              * last node that you looked at (check the first if-case). */
 
             // System.out.println("Node's name: " + attributes.getValue("v"));
+            node.setName(attributes.getValue("v"));
         }
     }
 
@@ -140,6 +144,12 @@ public class GraphBuildingHandler extends DefaultHandler {
              * actually connect the nodes together if the way is valid. */
 
             // System.out.println("Finishing a way...");
+            if (edge.valid) {
+                for (int i = 0; i < edge.nodes.size() - 1; i += 1) {
+                    g.addNeighbors(edge.nodes.get(i), edge.nodes.get(i + 1));
+                }
+            }
+            g.addEdge(wayid, edge);
         }
     }
 

@@ -5,11 +5,11 @@ import java.io.IOException;
 import javax.xml.parsers.ParserConfigurationException;
 import javax.xml.parsers.SAXParser;
 import javax.xml.parsers.SAXParserFactory;
-import java.util.HashMap;
-import java.util.HashSet;
 import java.util.Collections;
-import java.util.List;
+import java.util.HashMap;
 import java.util.ArrayList;
+import java.util.HashSet;
+import java.util.List;
 
 /**
  * Graph for storing all of the intersection (vertex) and road (edge) information.
@@ -27,10 +27,14 @@ public class GraphDB {
         String name;
         double lon;
         double lat;
+        double x;
+        double y;
         Node(long id, double lon, double lat) {
             this.id = id;
             this.lon = lon;
             this.lat = lat;
+            this.x = projectToX(lon, lat);
+            this.y = projectToY(lon, lat);
         }
 
         public void setName(String name) {
@@ -70,6 +74,8 @@ public class GraphDB {
     HashMap<Long, Node> nodes = new HashMap();
     HashMap<Long, Edge> edges = new HashMap<>();
     HashMap<Long, HashSet<Long>> neighbors = new HashMap<>();
+    KdTree root;
+
     public void addNode(Node node) {
         nodes.put(node.id, node);
     }
@@ -101,6 +107,7 @@ public class GraphDB {
             e.printStackTrace();
         }
         clean();
+        createKdTree();
     }
 
     /**
@@ -191,6 +198,82 @@ public class GraphDB {
         double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
         return R * c;
     }
+    class KdTree {
+        long median;
+        KdTree left;
+        KdTree right;
+        boolean axis;
+        double x;
+        double y;
+        KdTree(long median, KdTree left, KdTree right, boolean axis, double x, double y) {
+            this.median = median;
+            this.left = left;
+            this.right = right;
+            this.axis = axis;
+            this.x = x;
+            this.y = y;
+        }
+    }
+    public KdTree kdTreeHelper(List<Long> lst, boolean axis) {
+        if (lst.size() == 0) {
+            return null;
+        }
+        if (axis) {
+            lst.sort((v, w) -> (Double.compare(nodes.get(v).x,
+                    nodes.get(w).x)));
+        } else {
+            lst.sort((v, w) -> (Double.compare(nodes.get(v).y,
+                    nodes.get(w).y)));
+        }
+        int mid = lst.size() / 2;
+        KdTree left =  kdTreeHelper(lst.subList(0, mid), !axis);
+        KdTree right = kdTreeHelper(lst.subList(mid + 1, lst.size()), !axis);
+        return new KdTree(lst.get(mid), left, right, axis,
+                nodes.get(lst.get(mid)).x, nodes.get(lst.get(mid)).y);
+    }
+    public void createKdTree() {
+        List<Long> lst = new ArrayList<>(nodes.keySet());
+        root = kdTreeHelper(lst, true);
+    }
+    class Pair {
+        KdTree currentbest;
+        double bestdist;
+        Pair(KdTree currentbest, double bestdist) {
+            this.currentbest = currentbest;
+            this.bestdist = bestdist;
+        }
+    }
+    public Pair closestHelper(KdTree t, double x, double y,
+                              KdTree currentbest, double bestdist) {
+        if (t == null) {
+            return new Pair(currentbest, bestdist);
+        }
+        double distance = euclidean(t.x, x, t.y, y);
+        double diff;
+        if (t.axis) {
+            diff = t.x - x;
+        } else {
+            diff = t.y - y;
+        }
+        double abs = Math.abs(diff);
+        if (distance < bestdist || bestdist == -1) {
+            currentbest = t;
+            bestdist = distance;
+        }
+        if (diff < 0) {
+            Pair right = closestHelper(t.right, x, y, currentbest, bestdist);
+            if (bestdist > abs) {
+                return closestHelper(t.left, x, y, right.currentbest, right.bestdist);
+            }
+            return right;
+        } else {
+            Pair left = closestHelper(t.left, x, y, currentbest, bestdist);
+            if (bestdist > abs) {
+                return closestHelper(t.right, x, y, left.currentbest, left.bestdist);
+            }
+            return left;
+        }
+    }
 
     /**
      * Returns the ID of the vertex closest to the given longitude and latitude.
@@ -199,24 +282,13 @@ public class GraphDB {
      * @return The ID for the vertex closest to the <code>lon</code> and <code>lat</code>.
      */
     public long closest(double lon, double lat) {
-        double min = -1;
-        long id = -1;
-        for (long v: nodes.keySet()) {
-            double phi1 = Math.toRadians(lat);
-            double phi2 = Math.toRadians(lat(v));
-            double dphi = Math.toRadians(lat - lat(v));
-            double dlambda = Math.toRadians(lon - lon(v));
-            double a = Math.sin(dphi / 2.0) * Math.sin(dphi / 2.0);
-            a += Math.cos(phi1) * Math.cos(phi2)
-                    * Math.sin(dlambda / 2.0) * Math.sin(dlambda / 2.0);
-            double c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
-            double distance = R * c;
-            if (min == -1 || min > distance) {
-                min = distance;
-                id = v;
-            }
-        }
-        return id;
+        double x = projectToX(lon, lat);
+        double y = projectToY(lon, lat);
+        return closestHelper(root, x, y, null, -1).currentbest.median;
+
+    }
+    static double euclidean(double x1, double x2, double y1, double y2) {
+        return Math.sqrt(Math.pow(x1 - x2, 2) + Math.pow(y1 - y2, 2));
     }
 
     /**

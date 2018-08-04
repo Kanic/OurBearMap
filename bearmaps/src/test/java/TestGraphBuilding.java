@@ -137,4 +137,18 @@ public class TestGraphBuilding {
         }
         return N;
     }
+    @Test
+    public void closestTime() {
+        double total = 0.0;
+        for (int i = 0; i < 1000; i++) {
+            double lon = MapServer.ROOT_ULLON + (MapServer.ROOT_LRLON - MapServer.ROOT_ULLON) * Math.random();
+            double lat = MapServer.ROOT_LRLAT + (MapServer.ROOT_ULLAT - MapServer.ROOT_LRLAT) * Math.random();
+            double start = System.currentTimeMillis();
+            graph.closest(lon, lat);
+            double end = System.currentTimeMillis();
+            total += (end - start);
+            System.out.println(end - start);
+        }
+        System.out.println(total);
+    }
 }

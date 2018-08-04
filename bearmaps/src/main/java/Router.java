@@ -3,7 +3,10 @@ import java.util.List;
 import java.util.Objects;
 import java.util.regex.Matcher;
 import java.util.regex.Pattern;
-
+import java.util.HashMap;
+import java.util.PriorityQueue;
+import java.util.HashSet;
+import java.util.ArrayList;
 /**
  * This class provides a <code>shortestPath</code> method and <code>routeDirections</code> for
  * finding routes between two points on the map.
@@ -22,8 +25,41 @@ public class Router {
     public static List<Long> shortestPath(GraphDB g,
                                           double stlon, double stlat,
                                           double destlon, double destlat) {
-        // TODO
-        return Collections.emptyList();
+        HashMap<Long, Double> distance = new HashMap<>();
+        HashMap<Long, Long> predecessor = new HashMap<>();
+        PriorityQueue<Long> fringe = new PriorityQueue(g.nodes.size(),
+            (x, y) -> distance.get(x).compareTo(distance.get(y)));
+        HashSet<Long> visited = new HashSet<>();
+        long start = g.closest(stlon, stlat);
+        long stop = g.closest(destlon, destlat);
+        fringe.add(start);
+        distance.put(start, 0.0);
+        predecessor.put(start, start);
+        long v;
+        while (!fringe.isEmpty() && !visited.contains(stop)) {
+            v = fringe.poll();
+            visited.add(v);
+            for (long w : g.adjacent(v)) {
+                if (!visited.contains(w)) {
+                    if (!fringe.contains(w)
+                            || g.distance(v, w) + distance.get(v) < distance.get(w)) {
+                        distance.put(w, distance.get(v) + g.distance(v, w));
+                        fringe.add(w);
+                        predecessor.put(w, v);
+                    }
+                }
+            }
+        }
+        ArrayList<Long> path = new ArrayList<>();
+        try {
+            for (long i = stop; i != start && !predecessor.isEmpty(); i = predecessor.get(i)) {
+                path.add(0, i);
+            }
+            path.add(0, start);
+        } catch (NullPointerException e) {
+            return Collections.emptyList();
+        }
+        return path;
     }
 
     /**
